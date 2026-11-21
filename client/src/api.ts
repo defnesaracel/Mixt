@@ -3,6 +3,14 @@ const TOKEN_KEY = "gunun-sarkisi-token";
 export type Member = { id: number; nickname: string; isAdmin: boolean };
 export type Group = { id: number; name: string; inviteCode: string; members: Member[] };
 export type Me = { userId: number; nickname: string; isAdmin: boolean; group: Group };
+export type Song = { id: string; title: string; artist: string; coverUrl: string | null };
+export type Phase = "pick" | "guess" | "result";
+export type TodayData = {
+  round: { id: number; date: string; prompt: string; phase: Phase };
+  memberCount: number;
+  pickedCount: number;
+  myPick: { title: string; artist: string; coverUrl: string | null } | null;
+};
 
 export function getToken(): string | null {
   try {

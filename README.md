@@ -7,7 +7,7 @@ Ayrıntılar ve kararlar için: [SPEC.md](SPEC.md)
 ## Durum
 
 - [x] 1. İskelet: sunucu, SQLite şeması, grup kurma ve davet koduyla katılma
-- [ ] 2. Şarkı seçme (`pick`)
+- [x] 2. Şarkı seçme (`pick`): 36 şarkılık sahte katalog, 30 günlük soru, arama ve seçim
 - [ ] 3. Tahmin ve oy (`guess`)
 - [ ] 4. Sonuç ekranı ve yönetici düğmesi (`result`)
 - [ ] 5. Görünüm, testler, yayına alma
