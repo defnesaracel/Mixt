@@ -10,6 +10,21 @@ export type TodayData = {
   memberCount: number;
   pickedCount: number;
   myPick: { title: string; artist: string; coverUrl: string | null } | null;
+  guess: GuessData | null;
+};
+export type GuessSong = {
+  pickId: number;
+  title: string;
+  artist: string;
+  coverUrl: string | null;
+  isMine: boolean;
+};
+export type GuessData = {
+  songs: GuessSong[];
+  candidates: { id: number; nickname: string }[];
+  myGuesses: Record<string, number>;
+  myVote: number | null;
+  finishedCount: number;
 };
 
 export function getToken(): string | null {

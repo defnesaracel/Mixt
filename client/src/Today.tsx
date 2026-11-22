@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "./api";
-import type { Song, TodayData } from "./api";
+import type { GuessData, Song, TodayData } from "./api";
 
 const REFRESH_MS = 5000;
 
@@ -32,11 +32,11 @@ export function Today() {
         <h2>{data.round.prompt}</h2>
       </div>
 
-      {data.round.phase === "pick" ? (
-        <PickPhase data={data} onPicked={load} />
-      ) : (
-        <p className="muted">Seçim aşaması bitti. Sonraki aşama yakında.</p>
+      {data.round.phase === "pick" && <PickPhase data={data} onPicked={load} />}
+      {data.round.phase === "guess" && data.guess && (
+        <GuessPhase roundId={data.round.id} memberCount={data.memberCount} guess={data.guess} onChanged={load} />
       )}
+      {data.round.phase === "result" && <p className="muted">Herkes bitirdi! Sonuç ekranı yakında.</p>}
       {error && <p className="error">{error}</p>}
     </section>
   );
@@ -129,5 +129,91 @@ function SongRow({ title, artist }: { title: string; artist: string }) {
         <span className="muted">{artist}</span>
       </span>
     </span>
+  );
+}
+
+function GuessPhase({
+  roundId,
+  memberCount,
+  guess,
+  onChanged,
+}: {
+  roundId: number;
+  memberCount: number;
+  guess: GuessData;
+  onChanged: () => Promise<void>;
+}) {
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function send(action: "guess" | "vote", body: unknown) {
+    setBusy(true);
+    setError("");
+    try {
+      await api(`/api/rounds/${roundId}/${action}`, body);
+      await onChanged();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const others = guess.songs.filter((s) => !s.isMine);
+  const guessedCount = others.filter((s) => guess.myGuesses[s.pickId] !== undefined).length;
+  const iAmDone = guessedCount === others.length && (others.length === 0 || guess.myVote !== null);
+
+  return (
+    <>
+      <p className="muted">
+        Her şarkıyı kimin seçtiğini tahmin et ve en sevdiğine oy ver.
+      </p>
+      <p className="progress">
+        {iAmDone ? "Tamamladın! " : `Tahmin ${guessedCount}/${others.length}, oy ${guess.myVote ? "✓" : "yok"} · `}
+        {guess.finishedCount}/{memberCount} kişi bitirdi
+      </p>
+      {error && <p className="error">{error}</p>}
+
+      <ul className="song-list">
+        {guess.songs.map((song) => {
+          const voted = guess.myVote === song.pickId;
+          return (
+            <li key={song.pickId} className={song.isMine ? "card mine" : voted ? "card voted" : "card"}>
+              <SongRow title={song.title} artist={song.artist} />
+              {song.isMine ? (
+                <p className="muted">Senin seçimin</p>
+              ) : (
+                <div className="guess-controls">
+                  <select
+                    aria-label="Bunu kim seçti?"
+                    value={guess.myGuesses[song.pickId] ?? ""}
+                    disabled={busy}
+                    onChange={(e) =>
+                      send("guess", { guesses: [{ pickId: song.pickId, userId: Number(e.target.value) }] })
+                    }
+                  >
+                    <option value="" disabled>
+                      Bunu kim seçti?
+                    </option>
+                    {guess.candidates.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.nickname}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    className={voted ? "primary" : ""}
+                    disabled={busy || voted}
+                    onClick={() => send("vote", { pickId: song.pickId })}
+                  >
+                    {voted ? "♥ Oyun" : "♡ Oy ver"}
+                  </button>
+                </div>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </>
   );
 }
