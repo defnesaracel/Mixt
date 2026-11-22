@@ -9,7 +9,7 @@ Ayrıntılar ve kararlar için: [SPEC.md](SPEC.md)
 - [x] 1. İskelet: sunucu, SQLite şeması, grup kurma ve davet koduyla katılma
 - [x] 2. Şarkı seçme (`pick`): 36 şarkılık sahte katalog, 30 günlük soru, arama ve seçim
 - [x] 3. Tahmin ve oy (`guess`): isimsiz karışık liste, "kim seçti" tahmini, oy, aşamalar arası otomatik geçiş
-- [ ] 4. Sonuç ekranı ve yönetici düğmesi (`result`)
+- [x] 4. Sonuç ekranı ve yönetici düğmesi (`result`): günün şarkısı (beraberlikte birden fazla), kim neyi seçti, kimin tahmini tuttu
 - [ ] 5. Görünüm, testler, yayına alma
 
 ## Çalıştırma

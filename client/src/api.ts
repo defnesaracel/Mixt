@@ -11,6 +11,23 @@ export type TodayData = {
   pickedCount: number;
   myPick: { title: string; artist: string; coverUrl: string | null } | null;
   guess: GuessData | null;
+  result: ResultData | null;
+};
+export type ResultSong = {
+  pickId: number;
+  title: string;
+  artist: string;
+  coverUrl: string | null;
+  pickedBy: string;
+  isMine: boolean;
+  votes: number;
+  isWinner: boolean;
+  myGuess: string | null;
+  myGuessCorrect: boolean | null;
+};
+export type ResultData = {
+  songs: ResultSong[];
+  guessers: { nickname: string; correct: number; total: number }[];
 };
 export type GuessSong = {
   pickId: number;

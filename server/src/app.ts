@@ -254,6 +254,87 @@ export function createApp(db: DatabaseSync, options: { today?: () => string } = 
     };
   }
 
+  function resultPhaseData(round: Round, userId: number) {
+    const members = db
+      .prepare("SELECT id, nickname FROM users WHERE group_id = ?")
+      .all(round.group_id) as { id: number; nickname: string }[];
+    const nickname = new Map(members.map((m) => [m.id, m.nickname]));
+
+    const voteCounts = new Map(
+      (
+        db
+          .prepare("SELECT pick_id, count(*) AS n FROM votes WHERE round_id = ? GROUP BY pick_id")
+          .all(round.id) as { pick_id: number; n: number }[]
+      ).map((v) => [v.pick_id, v.n]),
+    );
+    const myGuesses = new Map(
+      (
+        db
+          .prepare("SELECT pick_id, guessed_user_id FROM guesses WHERE round_id = ? AND guesser_id = ?")
+          .all(round.id, userId) as { pick_id: number; guessed_user_id: number }[]
+      ).map((g) => [g.pick_id, g.guessed_user_id]),
+    );
+
+    const picks = roundPicks(round.id);
+    const topVotes = Math.max(0, ...picks.map((p) => voteCounts.get(p.id) ?? 0));
+    const songs = picks
+      .map((p) => {
+        const votes = voteCounts.get(p.id) ?? 0;
+        const myGuess = myGuesses.get(p.id);
+        return {
+          pickId: p.id,
+          title: p.title,
+          artist: p.artist,
+          coverUrl: p.cover_url,
+          pickedBy: nickname.get(p.user_id) ?? "?",
+          isMine: p.user_id === userId,
+          votes,
+          // Hiç oy yoksa kazanan da yok.
+          isWinner: topVotes > 0 && votes === topVotes,
+          myGuess: myGuess === undefined ? null : (nickname.get(myGuess) ?? "?"),
+          myGuessCorrect: myGuess === undefined ? null : myGuess === p.user_id,
+        };
+      })
+      .sort((a, b) => b.votes - a.votes || a.title.localeCompare(b.title, "tr"));
+
+    // Kimin kaç tahmini tuttu: sadece bilgi, puan yok.
+    const guessStats = db
+      .prepare(
+        `SELECT g.guesser_id AS userId, count(*) AS total,
+                sum(CASE WHEN g.guessed_user_id = p.user_id THEN 1 ELSE 0 END) AS correct
+         FROM guesses g JOIN picks p ON p.id = g.pick_id
+         WHERE g.round_id = ? GROUP BY g.guesser_id`,
+      )
+      .all(round.id) as { userId: number; total: number; correct: number }[];
+    const guessers = guessStats
+      .map((s) => ({ nickname: nickname.get(s.userId) ?? "?", correct: s.correct, total: s.total }))
+      .sort((a, b) => a.nickname.localeCompare(b.nickname, "tr"));
+
+    return { songs, guessers };
+  }
+
+  app.post("/api/rounds/:id/advance", requireUser, (req, res) => {
+    const round = findRoundForUser(req, res);
+    if (!round) return;
+    if (req.user!.is_admin !== 1) {
+      res.status(403).json({ error: "Sadece yönetici aşamayı ilerletebilir" });
+      return;
+    }
+    if (round.phase === "pick") {
+      if (roundPicks(round.id).length === 0) {
+        res.status(409).json({ error: "Henüz kimse şarkı seçmedi" });
+        return;
+      }
+      setPhase(round, "guess");
+    } else if (round.phase === "guess") {
+      setPhase(round, "result");
+    } else {
+      res.status(409).json({ error: "Tur zaten bitti" });
+      return;
+    }
+    res.json({ ok: true, phase: round.phase });
+  });
+
   app.get("/api/rounds/today", requireUser, (req, res) => {
     const user = req.user!;
     const round = getOrCreateTodayRound(user.group_id);
@@ -270,6 +351,7 @@ export function createApp(db: DatabaseSync, options: { today?: () => string } = 
       pickedCount,
       myPick,
       guess: round.phase === "guess" ? guessPhaseData(round, user.id) : null,
+      result: round.phase === "result" ? resultPhaseData(round, user.id) : null,
     });
   });
 

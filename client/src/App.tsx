@@ -65,7 +65,7 @@ export function App() {
         </div>
       )}
 
-      <Today />
+      <Today isAdmin={me.isAdmin} />
     </main>
   );
 }

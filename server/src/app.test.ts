@@ -203,3 +203,65 @@ test("tahmin ve oy aşaması", async () => {
     close();
   }
 });
+
+test("sonuç ekranı ve yönetici düğmesi", async () => {
+  const { call, close } = await startServer();
+  try {
+    const a = await call("/api/groups", { nickname: "Ayşe" });
+    const code = a.data.group.inviteCode;
+    const b = await call("/api/groups/join", { code, nickname: "Bora" });
+    const c = await call("/api/groups/join", { code, nickname: "Cem" });
+    const today = async (token: string) => (await call("/api/rounds/today", undefined, token)).data;
+    const roundId = (await today(a.data.token)).round.id;
+    const url = (action: string) => `/api/rounds/${roundId}/${action}`;
+
+    // Kimse seçmeden ilerletilemez; yönetici olmayan hiç ilerletemez.
+    assert.equal((await call(url("advance"), {}, a.data.token)).status, 409);
+    await call(url("pick"), { songId: "f01" }, a.data.token);
+    await call(url("pick"), { songId: "f02" }, b.data.token);
+    assert.equal((await call(url("advance"), {}, b.data.token)).status, 403);
+
+    // Cem seçmedi ama yönetici ilerletir.
+    const toGuess = await call(url("advance"), {}, a.data.token);
+    assert.equal(toGuess.data.phase, "guess");
+
+    const pickIdOf = async (token: string) =>
+      (await today(token)).guess.songs.find((s: { isMine: boolean }) => s.isMine).pickId;
+    const pickA = await pickIdOf(a.data.token);
+    const pickB = await pickIdOf(b.data.token);
+
+    // Ayşe doğru tahmin eder ve Bora'ya oy verir. Cem: bir doğru bir yanlış, Ayşe'ye oy.
+    await call(url("guess"), { guesses: [{ pickId: pickB, userId: b.data.userId }] }, a.data.token);
+    await call(url("vote"), { pickId: pickB }, a.data.token);
+    await call(
+      url("guess"),
+      { guesses: [{ pickId: pickA, userId: a.data.userId }, { pickId: pickB, userId: a.data.userId }] },
+      c.data.token,
+    );
+    await call(url("vote"), { pickId: pickA }, c.data.token);
+
+    // Bora bitirmedi; yönetici sonuca geçirir.
+    const toResult = await call(url("advance"), {}, a.data.token);
+    assert.equal(toResult.data.phase, "result");
+    assert.equal((await call(url("advance"), {}, a.data.token)).status, 409);
+
+    const result = (await today(c.data.token)).result;
+    assert.equal(result.songs.length, 2);
+    // Beraberlik: iki kazanan.
+    assert.deepEqual(
+      result.songs.map((s: { pickedBy: string; votes: number; isWinner: boolean }) => [s.pickedBy, s.votes, s.isWinner]).sort(),
+      [["Ayşe", 1, true], ["Bora", 1, true]],
+    );
+    const cemOnBora = result.songs.find((s: { pickedBy: string }) => s.pickedBy === "Bora");
+    assert.equal(cemOnBora.myGuess, "Ayşe");
+    assert.equal(cemOnBora.myGuessCorrect, false);
+    assert.deepEqual(result.guessers, [
+      { nickname: "Ayşe", correct: 1, total: 1 },
+      { nickname: "Cem", correct: 1, total: 2 },
+    ]);
+    // Tahmin aşaması verisi artık gönderilmez.
+    assert.equal((await today(a.data.token)).guess, null);
+  } finally {
+    close();
+  }
+});

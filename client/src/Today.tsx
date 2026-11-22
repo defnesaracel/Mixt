@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { api } from "./api";
-import type { GuessData, Song, TodayData } from "./api";
+import type { GuessData, Phase, ResultData, Song, TodayData } from "./api";
 
 const REFRESH_MS = 5000;
 
-export function Today() {
+export function Today({ isAdmin }: { isAdmin: boolean }) {
   const [data, setData] = useState<TodayData | null>(null);
   const [error, setError] = useState("");
 
@@ -36,8 +36,11 @@ export function Today() {
       {data.round.phase === "guess" && data.guess && (
         <GuessPhase roundId={data.round.id} memberCount={data.memberCount} guess={data.guess} onChanged={load} />
       )}
-      {data.round.phase === "result" && <p className="muted">Herkes bitirdi! Sonuç ekranı yakında.</p>}
+      {data.round.phase === "result" && data.result && <ResultPhase result={data.result} />}
       {error && <p className="error">{error}</p>}
+      {isAdmin && data.round.phase !== "result" && (
+        <AdminAdvance roundId={data.round.id} phase={data.round.phase} onAdvanced={load} />
+      )}
     </section>
   );
 }
@@ -215,5 +218,117 @@ function GuessPhase({
         })}
       </ul>
     </>
+  );
+}
+
+function ResultPhase({ result }: { result: ResultData }) {
+  const winners = result.songs.filter((s) => s.isWinner);
+  const rest = result.songs.filter((s) => !s.isWinner);
+
+  return (
+    <>
+      <div className="card winner">
+        <p className="muted">{winners.length > 1 ? "Günün şarkıları (berabere)" : "Günün şarkısı"}</p>
+        {winners.length === 0 && <p>Kimse oy vermedi, bugün kazanan yok.</p>}
+        {winners.map((song) => (
+          <div key={song.pickId} className="stack-sm">
+            <SongRow title={song.title} artist={song.artist} />
+            <p>
+              <strong>{song.pickedBy}</strong> seçti · {song.votes} oy
+            </p>
+          </div>
+        ))}
+      </div>
+
+      {rest.length > 0 && (
+        <>
+          <h3>Diğer şarkılar</h3>
+          <ul className="song-list">
+            {rest.map((song) => (
+              <li key={song.pickId} className="card">
+                <SongRow title={song.title} artist={song.artist} />
+                <p>
+                  <strong>{song.pickedBy}</strong> seçti · {song.votes} oy
+                </p>
+                <GuessNote song={song} />
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+
+      {winners.some((s) => s.myGuess !== null) && (
+        <div className="card">
+          <p className="muted">Kazanan için tahminin</p>
+          {winners.map((s) => (
+            <GuessNote key={s.pickId} song={s} />
+          ))}
+        </div>
+      )}
+
+      <h3>Kimin tahmini tuttu?</h3>
+      <div className="card">
+        {result.guessers.length === 0 && <p className="muted">Kimse tahmin yapmadı.</p>}
+        <ul className="plain">
+          {result.guessers.map((g) => (
+            <li key={g.nickname}>
+              <strong>{g.nickname}</strong>: {g.correct}/{g.total} doğru
+            </li>
+          ))}
+        </ul>
+      </div>
+    </>
+  );
+}
+
+function GuessNote({ song }: { song: ResultData["songs"][number] }) {
+  if (song.isMine) return <p className="muted">Senin seçimin</p>;
+  if (song.myGuess === null) return <p className="muted">Tahmin etmedin</p>;
+  return (
+    <p className={song.myGuessCorrect ? "correct" : "wrong"}>
+      {song.myGuessCorrect ? "✓" : "✗"} Tahminin: {song.myGuess}
+    </p>
+  );
+}
+
+const NEXT_PHASE_LABEL: Record<Exclude<Phase, "result">, string> = {
+  pick: "Tahmin aşamasına geç",
+  guess: "Sonuçları aç",
+};
+
+function AdminAdvance({
+  roundId,
+  phase,
+  onAdvanced,
+}: {
+  roundId: number;
+  phase: Exclude<Phase, "result">;
+  onAdvanced: () => Promise<void>;
+}) {
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function advance() {
+    if (!confirm(`${NEXT_PHASE_LABEL[phase]}? Bitirmeyenler bekletilmeden geçilir.`)) return;
+    setBusy(true);
+    setError("");
+    try {
+      await api(`/api/rounds/${roundId}/advance`, {});
+      await onAdvanced();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="card admin">
+      <p className="muted">Yönetici</p>
+      <button onClick={advance} disabled={busy}>
+        {NEXT_PHASE_LABEL[phase]} →
+      </button>
+      {error && <p className="error">{error}</p>}
+    </div>
   );
 }
