@@ -21,8 +21,6 @@ npm install
 npm run dev
 ```
 
-- İstemci: http://localhost:5173 (aynı Wi-Fi'daki telefondan bilgisayarın IP adresiyle açılabilir)
-- Sunucu: http://localhost:3001
 - Veritabanı dosyası: `server/data/app.db`
 
 Diğer komutlar:
